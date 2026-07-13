@@ -1,0 +1,10 @@
+# TSG Benchmark — Common Python Dependencies
+# Per-method environments are managed via conda (see scripts/setup_envs.sh)
+numpy>=1.21
+scipy>=1.7
+scikit-learn>=1.0
+pandas>=1.3
+matplotlib>=3.4
+seaborn>=0.11
+tqdm>=4.60
+PyYAML>=6.0
