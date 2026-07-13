@@ -10,14 +10,14 @@ A unified, reproducible benchmarking pipeline that compares **8 state-of-the-art
 
 | # | Method | Family | Venue | Paper | Official GitHub | Parameters (Sines, seq=24) |
 |---|--------|--------|-------|-------|-----------------|---------------------------|
-| 1 | TimeGAN | GAN | NeurIPS 2019 | [Yoon et al.](https://papers.nips.cc/paper/8789-time-series-generative-adversarial-networks) | [jsyoon0823/TimeGAN](https://github.com/jsyoon0823/TimeGAN) | ~27K |
-| 2 | RGAN / RCGAN | Recurrent GAN | arXiv 2017 | [Esteban et al.](https://arxiv.org/abs/1706.02633) | [ratschlab/RGAN](https://github.com/ratschlab/RGAN) | ~17K |
-| 3 | GT-GAN | GAN + Neural ODE | NeurIPS 2022 | [Jeon et al.](https://arxiv.org/abs/2210.02040) | [Jinsung-Jeon/GT-GAN](https://github.com/Jinsung-Jeon/GT-GAN) | ~156K |
-| 4 | TimeVAE | VAE | arXiv 2021 | [Desai et al.](https://arxiv.org/abs/2111.08095) | [abudesai/timeVAE](https://github.com/abudesai/timeVAE) | ~143K |
+| 1 | TimeGAN | GAN | NeurIPS 2019 | [Yoon et al.](https://papers.nips.cc/paper/8789-time-series-generative-adversarial-networks) | [jsyoon0823/TimeGAN](https://github.com/jsyoon0823/TimeGAN) | 48,606 |
+| 2 | RGAN / RCGAN | Recurrent GAN | arXiv 2017 | [Esteban et al.](https://arxiv.org/abs/1706.02633) | [ratschlab/RGAN](https://github.com/ratschlab/RGAN) | 6,198 |
+| 3 | GT-GAN | GAN + Neural ODE | NeurIPS 2022 | [Jeon et al.](https://arxiv.org/abs/2210.02040) | [Jinsung-Jeon/GT-GAN](https://github.com/Jinsung-Jeon/GT-GAN) | 12,168 |
+| 4 | TimeVAE | VAE | arXiv 2021 | [Desai et al.](https://arxiv.org/abs/2111.08095) | [abudesai/timeVAE](https://github.com/abudesai/timeVAE) | 181,816 |
 | 5 | Fourier Flows | Normalizing Flow | ICLR 2021 | [Alaa et al.](https://openreview.net/forum?id=u3skL0URlL) | [ahmedmalaa/Fourier-flows](https://github.com/ahmedmalaa/Fourier-flows) | ~274K |
 | 6 | CSDI | Conditional Diffusion | NeurIPS 2021 | [Tashiro et al.](https://arxiv.org/abs/2107.03575) | [ermongroup/CSDI](https://github.com/ermongroup/CSDI) | ~610K |
-| 7 | TSDiff | Unconditional Diffusion | NeurIPS 2023 | [Kollovieh et al.](https://arxiv.org/abs/2307.11494) | [amazon-science/unconditional-time-series-diffusion](https://github.com/amazon-science/unconditional-time-series-diffusion) | ~45K |
-| 8 | Diffusion-TS | Interpretable Diffusion | ICLR 2024 | [Yuan & Qiao](https://arxiv.org/abs/2403.01742) | [Y-debug-sys/Diffusion-TS](https://github.com/Y-debug-sys/Diffusion-TS) | ~104K |
+| 7 | TSDiff | Unconditional Diffusion | NeurIPS 2023 | [Kollovieh et al.](https://arxiv.org/abs/2307.11494) | [amazon-science/unconditional-time-series-diffusion](https://github.com/amazon-science/unconditional-time-series-diffusion) | 192,582 |
+| 8 | Diffusion-TS | Interpretable Diffusion | ICLR 2024 | [Yuan & Qiao](https://arxiv.org/abs/2403.01742) | [Y-debug-sys/Diffusion-TS](https://github.com/Y-debug-sys/Diffusion-TS) | 449,373 |
 
 **Note on TSDiff:** This method currently **FAILS** on this benchmark due to a `context_length=0` incompatibility with GluonTS that causes mode collapse. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for details.
 
