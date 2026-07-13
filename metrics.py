@@ -473,24 +473,35 @@ def teacher_sigma_metrics(
 def _import_timegan_metric(name: str) -> Any:
     """Dynamically import a metric function from the TimeGAN repo.
 
-    Adds ``repos/TimeGAN`` to ``sys.path`` if it isn't already there.
+    Uses SourceFileLoader to avoid namespace collision between
+    our ``metrics.py`` and the TimeGAN repo's ``metrics/`` package.
     """
     timegan_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.abspath(__file__)),
         'repos', 'TimeGAN',
     )
-    if timegan_dir not in sys.path:
-        sys.path.insert(0, timegan_dir)
-
-    spec = importlib.util.find_spec(f'metrics.{name}')
-    if spec is None:
+    module_path = os.path.join(timegan_dir, 'metrics', f'{name}.py')
+    if not os.path.isfile(module_path):
         raise ImportError(
-            f"Could not find TimeGAN metrics module "
-            f"``metrics.{name}`` at {timegan_dir}. "
-            f"Ensure the TimeGAN repo is present."
+            f"TimeGAN metrics module not found: {module_path}"
         )
 
-    mod = importlib.import_module(f'metrics.{name}')
+    loader = importlib.machinery.SourceFileLoader(
+        f'timegan_{name}',
+        module_path,
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    # Temporarily add TimeGAN dir and remove our dir to avoid shadowing
+    saved_path = sys.path.copy()
+    our_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path = [p for p in sys.path if p != our_dir]
+    if timegan_dir not in sys.path:
+        sys.path.insert(0, timegan_dir)
+    try:
+        loader.exec_module(mod)
+    finally:
+        sys.path = saved_path
     return mod
 
 
