@@ -1,0 +1,12 @@
+repos/
+miniconda3/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+results/
+*.log
+*.out
+.claude/
+.env
+.omc/
