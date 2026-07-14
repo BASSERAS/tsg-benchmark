@@ -169,10 +169,12 @@ def load_dataset(name: str, seq_len: int, seed: int) -> dict:
 
 def get_device(gpu_id: int = 0) -> str:
     """Get device string. Use CPU if no GPU available."""
-    import torch
-
-    if torch.cuda.is_available() and gpu_id < torch.cuda.device_count():
-        return f"cuda:{gpu_id}"
+    try:
+        import torch
+        if torch.cuda.is_available() and gpu_id < torch.cuda.device_count():
+            return f"cuda:{gpu_id}"
+    except ImportError:
+        pass
     return "cpu"
 
 
@@ -185,6 +187,7 @@ def run_experiment(
     seed: int,
     gpu_id: int = 0,
     small: bool = False,
+    output_dir: Optional[str] = None,
 ) -> dict:
     """
     Run one (method × dataset × seq_len × seed) experiment.
@@ -241,6 +244,15 @@ def run_experiment(
     from data.datasets import inverse_min_max
     gen_data_orig = inverse_min_max(gen_data, data_dict["min_vals"], data_dict["max_vals"])
 
+    # Save generated samples for A13/A14 post-processing from TF1
+    _samp_dir = os.path.join(output_dir or RESULTS_DIR, "samples")
+    os.makedirs(_samp_dir, exist_ok=True)
+    _samp_path = os.path.join(_samp_dir, f"{method}_{dataset_name}_s{seq_len}_seed{seed}.npy")
+    np.save(_samp_path, gen_data_orig.astype(np.float16))
+    _real_path = os.path.join(_samp_dir, f"real_{dataset_name}_s{seq_len}.npy")
+    if not os.path.exists(_real_path):
+        np.save(_real_path, data_dict["test_raw"].astype(np.float16))
+
     # --- COMPUTE METRICS ---
     from metrics import (
         compute_all_metrics,
@@ -290,6 +302,7 @@ def main():
     parser.add_argument("--methods", type=str, default=None, help="Comma-separated method list")
     parser.add_argument("--datasets", type=str, default=None, help="Comma-separated dataset list")
     parser.add_argument("--seq-len", type=int, default=None, help="Single seq_len")
+    parser.add_argument("--seed", type=str, default=None, help="Single seed (0), comma-separated (0,1,2), or 'all'")
     parser.add_argument("--gpus", type=str, default="0,1,2,3", help="GPU IDs to use")
     parser.add_argument("--output", type=str, default=RESULTS_DIR, help="Results directory")
     args = parser.parse_args()
@@ -300,6 +313,11 @@ def main():
     datasets = args.datasets.split(",") if args.datasets else ALL_DATASETS
     seq_lens = [args.seq_len] if args.seq_len else ALL_SEQ_LENS
     seeds = [0] if is_small else SEEDS
+    if args.seed is not None:
+        if args.seed == "all":
+            seeds = SEEDS
+        else:
+            seeds = [int(s) for s in args.seed.split(",")]
     gpu_ids = [int(g) for g in args.gpus.split(",")]
 
     if is_small:
@@ -329,6 +347,7 @@ def main():
                         seed=seed,
                         gpu_id=gpu_id,
                         small=is_small,
+                        output_dir=args.output,
                     )
                     all_results.append(result)
 

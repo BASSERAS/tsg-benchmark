@@ -19,6 +19,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 logger = logging.getLogger(__name__)
+# Ensure logger outputs to stdout
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    _ch = logging.StreamHandler(sys.stdout)
+    _ch.setLevel(logging.INFO)
+    logger.addHandler(_ch)
 
 _REPO_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "repos", "RGAN")
@@ -120,6 +126,7 @@ class RGANAdapter:
 
         self._train_time: float = 0.0
         self._peak_mem_mb: float = 0.0
+        self._loss_history: Dict[str, list] = {"d_loss": [], "g_loss": []}
         self._graph: Optional[tf.Graph] = None
         self._sess: Optional[tf.Session] = None
         self._total_params: int = 0
@@ -295,6 +302,8 @@ class RGANAdapter:
                     "  RGAN step %5d/%d  D_loss=%.4f  G_loss=%.4f",
                     step + 1, self.training_steps, d_loss_val, g_loss_val,
                 )
+                self._loss_history["d_loss"].append((step + 1, float(d_loss_val)))
+                self._loss_history["g_loss"].append((step + 1, float(g_loss_val)))
 
         elapsed = time.perf_counter() - t_start
         self._train_time = elapsed

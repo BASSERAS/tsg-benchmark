@@ -274,6 +274,12 @@ class GTGANAdapter:
         # Tracking
         self._train_time = 0.0
         self._peak_mem_mb = 0.0
+        self._loss_history: dict = {
+            "phase1_loss_e": [],
+            "phase2_loss_d": [],
+            "phase2_loss_g_u": [],
+            "phase2_loss_g_v": [],
+        }
         self._models = {}
 
         # The benchmark may set this to the step budget.
@@ -342,6 +348,8 @@ class GTGANAdapter:
             if step % 500 == 0:
                 print(f"  [GT-GAN] Phase 1 step {step}/{first_epochs}, "
                       f"loss_e: {math.sqrt(loss_e.item()):.4f}")
+                self._loss_history["phase1_loss_e"].append(
+                    (step, loss_e.item()))
 
         print("  [GT-GAN] Phase 1 done.")
 
@@ -424,6 +432,12 @@ class GTGANAdapter:
                       f"loss_d: {loss_d.item():.4f}, "
                       f"loss_g_u: {loss_g_u.item():.4f}, "
                       f"loss_g_v: {loss_g_v.item():.4f}")
+                self._loss_history["phase2_loss_d"].append(
+                    (step, loss_d.item()))
+                self._loss_history["phase2_loss_g_u"].append(
+                    (step, loss_g_u.item()))
+                self._loss_history["phase2_loss_g_v"].append(
+                    (step, loss_g_v.item()))
 
         print("  [GT-GAN] Phase 2 done.")
 

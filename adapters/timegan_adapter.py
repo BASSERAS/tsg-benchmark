@@ -27,7 +27,12 @@ if _REPO_DIR not in sys.path:
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import tensorflow as tf  # TF 1.x
+import tensorflow.compat.v1 as tf  # TF 1.x compat mode
+tf.disable_eager_execution()
+tf.disable_v2_behavior()
+
+# Import timegan and utils
+from timegan import timegan  # type: ignore[import-untyped]
 from utils import batch_generator, random_generator  # type: ignore[import-untyped]
 
 
@@ -133,6 +138,15 @@ class TimeGANAdapter:
         )
         self._train_time: float = 0.0
         self._peak_mem: float = 0.0
+        self._loss_history: dict = {
+            "e_loss": [],
+            "g_s_loss": [],
+            "joint_d_loss": [],
+            "joint_g_u_loss": [],
+            "joint_g_s_loss": [],
+            "joint_g_v_loss": [],
+            "joint_e_loss": [],
+        }
 
         # ---- State populated by fit() ----
         self._graph: Optional[tf.Graph] = None
@@ -166,7 +180,10 @@ class TimeGANAdapter:
         """
         t_start = time.perf_counter()
         np.random.seed(self.seed)
-        tf.set_random_seed(self.seed)
+        try:
+            tf.set_random_seed(self.seed)
+        except AttributeError:
+            tf.compat.v1.set_random_seed(self.seed)
 
         # Sync parameters with external step budget override.
         self._params["iterations"] = self.training_steps
@@ -195,12 +212,18 @@ class TimeGANAdapter:
         # ---- Monkey-patch tf.Session -> tf.InteractiveSession so the   ----
         # ---- session created inside timegan() registers as the default  ----
         # ---- and stays accessible after the function returns.           ----
-        _orig_Session = tf.Session
-        tf.Session = tf.InteractiveSession  # type: ignore[assignment]
+        _orig_Session = getattr(tf, 'Session', getattr(tf.compat.v1, 'Session', None))
+        _orig_InteractiveSession = getattr(tf, 'InteractiveSession', getattr(tf.compat.v1, 'InteractiveSession', None))
+        if _orig_InteractiveSession is None:
+            raise RuntimeError("Could not find tf.Session or tf.InteractiveSession in this TF version")
+        tf.Session = _orig_InteractiveSession  # type: ignore[assignment]
 
         try:
             from timegan import timegan  # type: ignore[import-untyped]
-            _generated = timegan(ori_data, self._params)
+            _generated, _loss_hist = timegan(ori_data, self._params)
+            for key in self._loss_history:
+                if key in _loss_hist:
+                    self._loss_history[key] = _loss_hist[key]
         finally:
             tf.Session = _orig_Session
 

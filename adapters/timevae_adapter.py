@@ -68,6 +68,7 @@ class TimeVAEAdapter:
         # Tracking
         self._train_time = 0.0
         self._peak_mem_mb = 0.0
+        self._loss_history: dict = {"recon_loss": [], "kl_loss": []}
         self._model = None
 
         # The benchmark may set this to the step budget.
@@ -114,6 +115,14 @@ class TimeVAEAdapter:
             max_epochs=epochs,
             verbose=0,
         )
+        # Capture loss history from training history
+        if hist is not None and hasattr(hist, 'history'):
+            for epoch, loss_val in enumerate(hist.history.get('loss', [])):
+                self._loss_history["recon_loss"].append((epoch, float(loss_val)))
+        # Try to extract KL loss if available
+        if hist is not None and hasattr(hist, 'history'):
+            for epoch, kl_val in enumerate(hist.history.get('kl_loss', [])):
+                self._loss_history["kl_loss"].append((epoch, float(kl_val)))
 
         t_end = time.time()
         self._train_time = t_end - t_start

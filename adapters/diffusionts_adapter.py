@@ -53,6 +53,7 @@ class DiffusionTSAdapter:
 
         self._train_time = 0.0
         self._peak_mem_mb = 0.0
+        self._loss_history: dict = {"diffusion_loss": []}
         self._model = None
         self.training_steps = 5000
 
@@ -98,6 +99,7 @@ class DiffusionTSAdapter:
                 step += 1
                 if step % 1000 == 0:
                     print(f"  Diffusion-TS step {step}/{self.training_steps}, loss: {loss.item():.6f}")
+                    self._loss_history["diffusion_loss"].append((step, loss.item()))
 
         self._train_time = time.time() - t_start
         self._model.eval()

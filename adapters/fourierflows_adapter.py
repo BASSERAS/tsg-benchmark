@@ -139,6 +139,7 @@ class FourierFlowsAdapter:
         # Tracking
         self._train_time = 0.0
         self._peak_mem_mb = 0.0
+        self._loss_history: dict = {"nll_loss": []}
         self._model = None
 
         # The benchmark may set this to the step budget.
@@ -219,6 +220,7 @@ class FourierFlowsAdapter:
                     f"  [FourierFlows] Step {step}/{epochs}, "
                     f"loss: {loss.item():.4f}"
                 )
+                self._loss_history["nll_loss"].append((step, loss.item()))
 
         print("  [FourierFlows] Training done.")
 

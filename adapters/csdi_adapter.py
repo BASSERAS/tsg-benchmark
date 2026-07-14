@@ -75,6 +75,7 @@ class CSDIAdapter:
         self.num_steps = num_steps
         self._train_time = 0.0
         self._peak_mem_mb = 0.0
+        self._loss_history: dict = {"diffusion_loss": []}
         self._model = None
         self.training_steps = 5000
 
@@ -131,6 +132,7 @@ class CSDIAdapter:
 
             if epoch % 5 == 0 and loss is not None:
                 print(f"  CSDI epoch {epoch}/{config['train']['epochs']}, step {step}, loss: {loss.item():.4f}")
+                self._loss_history["diffusion_loss"].append((step, loss.item()))
 
         self._train_time = time.time() - t_start
         self._model.eval()
