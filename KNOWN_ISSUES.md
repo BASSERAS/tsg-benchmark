@@ -68,6 +68,8 @@ Status of all 8 methods and known workarounds for the TSG SOTA Benchmark.
   "
   ```
 - **Validation results:** A13/A14 were computed for all methods on Sines (seq_len=24, seed=0) using the `tf1_env` post-processing workaround. See `results/tf1_sines_results.json`.
+- **PT methods limitation:** For PyTorch methods (FF, CSDI, DTS, GT-GAN) on other datasets, the TF1 post-processing is impractical: each sample requires rebuilding a TF GRU classifier graph (~30-60s per sample). With 80+ samples this exceeds practical runtime. These methods have A13/A14 marked as NaN on non-Sines datasets.
+- **TF1 native methods:** TimeGAN and RGAN (both TF1) have A13/A14 computed automatically during training. TimeVAE (TF2) also has them.
 
 ---
 
