@@ -1,164 +1,149 @@
 #!/usr/bin/env python3
-"""Post-process A13/A14 for PT methods using saved .npy samples + TF1 env.
-Computes Discriminative Score (A13) and Predictive Score (A14) for
-Fourier-flows, CSDI, GT-GAN, Diffusion-TS using TimeGAN's TF1 metrics.
-
-Usage: ./miniconda3/envs/tf1_env/bin/python scripts/postproc_a13a14.py
+"""A13/A14 post-processing using saved .npy samples.
+Run via: ./miniconda3/envs/tf1_env/bin/python scripts/postproc_a13a14.py
 """
-import json, os, sys, warnings, numpy as np, glob as globmod
+import os, sys, json, warnings, numpy as np
 warnings.filterwarnings('ignore')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-SAMPLES = os.path.join(ROOT, "results", "samples")
-RESULTS = os.path.join(ROOT, "results", "all_results.jsonl")
+os.chdir(ROOT)
 
-# Add TimeGAN repo to path for metrics module
-_tg_dir = os.path.join(ROOT, "repos", "TimeGAN")
-sys.path.insert(0, _tg_dir)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+# CRITICAL: Force TF1 mode on the GLOBAL tensorflow module
+# We patch the module that metrics modules will import as 'import tensorflow as tf'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow
+_tf1 = tensorflow.compat.v1
+_tf1.disable_eager_execution()
+_tf1.disable_v2_behavior()
 
-import tensorflow as tf
-# Import directly from file path since TimeGAN's metrics/ dir has no __init__.py
+# Patch TF1 APIs onto the main tensorflow module (not compat.v1)
+# because the TimeGAN metrics modules do "import tensorflow as tf"
+_tf = tensorflow  # the module the metrics modules see
+_TF1_APIS = ['reset_default_graph','placeholder','Session','set_random_seed',
+             'global_variables_initializer','variable_scope','get_variable',
+             'get_collection','GraphKeys','AUTO_REUSE','all_variables',
+             'trainable_variables','get_default_graph','get_default_session']
+for _n in _TF1_APIS:
+    if not hasattr(_tf, _n) and hasattr(_tf1, _n):
+        setattr(_tf, _n, getattr(_tf1, _n))
+
+# Patch nn submodule
+if not hasattr(_tf.nn, 'dynamic_rnn'): _tf.nn.dynamic_rnn = _tf1.nn.dynamic_rnn
+if not hasattr(_tf.nn, 'rnn_cell'): _tf.nn.rnn_cell = _tf1.nn.rnn_cell
+if not hasattr(_tf.nn, 'moments'): _tf.nn.moments = _tf1.nn.moments
+
+# Copy specific loss functions
+if hasattr(_tf1.losses, 'sigmoid_cross_entropy') and not hasattr(_tf.losses, 'sigmoid_cross_entropy'):
+    for _fn in ['sigmoid_cross_entropy','mean_squared_error','absolute_difference']:
+        if hasattr(_tf1.losses, _fn):
+            setattr(_tf.losses, _fn, getattr(_tf1.losses, _fn))
+
+# Replace entire tf.train with compat.v1.train
+try:
+    import types
+    _tf.__dict__['train'] = _tf1.train
+except:
+    for _opt_name in ['AdamOptimizer','GradientDescentOptimizer','RMSPropOptimizer',
+                       'MomentumOptimizer','AdagradOptimizer']:
+        if hasattr(_tf1.train, _opt_name):
+            setattr(_tf.train, _opt_name, getattr(_tf1.train, _opt_name))
+
+# Patch contrib
+if not hasattr(_tf, 'contrib') or not hasattr(_tf.contrib, 'layers') or not hasattr(_tf.contrib.layers, 'fully_connected'):
+    if not hasattr(_tf, 'contrib'): _tf.contrib = type('contrib',(),{})()
+    if not hasattr(_tf.contrib, 'layers'): _tf.contrib.layers = type('layers',(),{})()
+    def _fc(inputs, num_outputs, activation_fn=None, **kw):
+        act = activation_fn if activation_fn else (lambda x: x)
+        return _tf.keras.layers.Dense(num_outputs, activation=act)(inputs)
+    _tf.contrib.layers.fully_connected = _fc
+
+# Now import TimeGAN metrics
+sys.path.insert(0, os.path.join(ROOT, 'repos', 'TimeGAN'))
+sys.path.insert(0, os.path.join(ROOT, 'repos', 'TimeGAN', 'metrics'))
+
+# Import metrics functions via importlib to avoid module caching issues
 import importlib.util
-_disc_spec = importlib.util.spec_from_file_location(
-    "discriminative_metrics",
-    os.path.join(_tg_dir, "metrics", "discriminative_metrics.py"))
+_disc_spec = importlib.util.spec_from_file_location('dm', os.path.join(ROOT, 'repos/TimeGAN/metrics/discriminative_metrics.py'))
 _disc_mod = importlib.util.module_from_spec(_disc_spec)
 _disc_spec.loader.exec_module(_disc_mod)
 discriminative_score_metrics = _disc_mod.discriminative_score_metrics
 
-_pred_spec = importlib.util.spec_from_file_location(
-    "predictive_metrics",
-    os.path.join(_tg_dir, "metrics", "predictive_metrics.py"))
+_pred_spec = importlib.util.spec_from_file_location('pm', os.path.join(ROOT, 'repos/TimeGAN/metrics/predictive_metrics.py'))
 _pred_mod = importlib.util.module_from_spec(_pred_spec)
 _pred_spec.loader.exec_module(_pred_mod)
 predictive_score_metrics = _pred_mod.predictive_score_metrics
 
+SAMPLES = os.path.join(ROOT, 'benchmark_other', 'samples')
+RESULTS = os.path.join(ROOT, 'benchmark_other', 'all_results.jsonl')
+
 def main():
+    samples_dir = SAMPLES
+    if not os.path.exists(samples_dir):
+        samples_alt = os.path.join(ROOT, 'results', 'samples')
+        if os.path.exists(samples_alt):
+            samples_dir = samples_alt
+        else:
+            print(f'No samples dir at {samples_dir} or {samples_alt}')
+            return
+
+    sample_files = sorted([f for f in os.listdir(samples_dir) if f.endswith('.npy') and not f.startswith('real_')])
+    real_files = {f.replace('real_',''): f for f in os.listdir(samples_dir) if f.startswith('real_')}
+    print(f'Found {len(sample_files)} generated samples, {len(real_files)} real files')
+
     results = []
     if os.path.exists(RESULTS):
         with open(RESULTS) as f:
             results = [json.loads(l) for l in f if l.strip()]
-    print(f"Loaded {len(results)} results")
 
-    # Find all generated sample files
-    sample_files = [f for f in globmod.glob(os.path.join(SAMPLES, "*.npy"))
-                    if not os.path.basename(f).startswith("real_")]
-    real_files = {os.path.basename(f).replace("real_", "").replace(".npy", ""): f
-                  for f in globmod.glob(os.path.join(SAMPLES, "real_*.npy"))}
-    print(f"Found {len(sample_files)} generated samples, {len(real_files)} real data files")
-
-    pt_methods = {"fourierflows", "csdi", "gtgan", "diffusionts"}
     updated = 0
-
-    for gf in sorted(sample_files):
-        basename = os.path.basename(gf).replace(".npy", "")
-        # Parse method_dataset_s{seq_len}_seed{N}
-        parts = basename.split("_")
+    for sf in sample_files:
+        parts = sf.replace('.npy','').split('_')
         method = parts[0]
-        if method not in pt_methods:
-            continue
-
-        # Find dataset part (between method and "s{num}")
-        dataset_parts = []
+        dataset_parts, seq_len, seed = [], None, None
         for p in parts[1:]:
-            if p.startswith("s") and p[1:].isdigit():
-                break
+            if p.startswith('s') and p[1:].isdigit():
+                seq_len = int(p[1:]); break
             dataset_parts.append(p)
-        dataset = "_".join(dataset_parts)
-
-        # Get seq_len
-        seq_len = None
         for p in parts:
-            if p.startswith("s") and p[1:].isdigit():
-                seq_len = int(p[1:])
-                break
+            if p.startswith('seed'): seed = int(p.replace('seed',''))
+        dataset = '_'.join(dataset_parts)
+        if None in (seq_len, seed): continue
 
-        # Get seed
-        seed = None
-        for p in parts:
-            if p.startswith("seed"):
-                seed = int(p.replace("seed", ""))
-                break
+        gen = np.load(os.path.join(samples_dir, sf))
+        real_key = f'{dataset}_s{seq_len}.npy'
+        if real_key not in real_files: continue
+        real = np.load(os.path.join(samples_dir, real_files[real_key]))
 
-        if None in (seq_len, seed):
-            continue
-
-        # Find matching real data
-        real_key = f"{dataset}_s{seq_len}"
-        if real_key not in real_files:
-            continue
-
-        gen = np.load(gf)
-        real = np.load(real_files[real_key])
+        if gen.ndim == 2: gen = gen.reshape(gen.shape[0], -1, 1) if gen.shape[0] >= gen.shape[1] else gen.reshape(-1, gen.shape[0], 1)
+        if real.ndim == 2: real = real.reshape(real.shape[0], -1, 1) if real.shape[0] >= real.shape[1] else real.reshape(-1, real.shape[0], 1)
+        if gen.ndim == 2: gen = gen.reshape(-1, gen.shape[0], 1)
+        if real.ndim == 2: real = real.reshape(-1, real.shape[0], 1)
 
         n = min(len(gen), len(real))
-        if n < 2:
-            continue
+        if n < 2: continue
+        gen_a, real_a = gen[:n], real[:n]
 
-        # Ensure 3D (n, T, d)
-        if gen.ndim == 2:
-            gen = gen.reshape(n, -1, 1)
-        if real.ndim == 2:
-            real = real.reshape(n, -1, 1)
-
-        gen_data = gen[:n]
-        real_data = real[:n]
-
-        print(f"  {method:15s} {dataset:12s} s{seq_len} seed={seed}: n={n}", end="")
-
+        print(f'  {method:15s} {dataset:12s} s{seq_len} seed={seed} (n={n})', end='')
         try:
-            disc = discriminative_score_metrics(real_data, gen_data)
-            pred = predictive_score_metrics(real_data, gen_data)
-            print(f" A13={disc:.4f} A14={pred:.4f}")
+            disc = discriminative_score_metrics(real_a, gen_a)
+            pred = predictive_score_metrics(real_a, gen_a)
+            print(f' A13={disc:.4f} A14={pred:.4f}')
         except Exception as e:
-            print(f" FAILED: {str(e)[:50]}")
+            print(f' FAILED: {str(e)[:60]}')
             disc = float('nan')
             pred = float('nan')
 
-        # Update result entry
         for r in results:
-            if (r.get("method") == method and r.get("dataset") == dataset
-                    and r.get("seq_len") == seq_len and r.get("seed") == seed):
-                r["discriminative_score"] = float(disc) if not np.isnan(disc) else float('nan')
-                r["predictive_score"] = float(pred) if not np.isnan(pred) else float('nan')
-                r["a13a14_source"] = "tf1_postproc"
+            if (r.get('method')==method and r.get('dataset')==dataset and r.get('seq_len')==seq_len and r.get('seed')==seed):
+                r['discriminative_score'] = float(disc) if not np.isnan(disc) else None
+                r['predictive_score'] = float(pred) if not np.isnan(pred) else None
+                r['a13a14_source'] = 'tf1_postproc'
                 updated += 1
                 break
 
-    # Also update remaining NaN entries that had no saved samples
-    print(f"\nUpdated {updated} entries with A13/A14")
+    with open(RESULTS, 'w') as f:
+        for r in results: f.write(json.dumps(r)+'\n')
+    print(f'\n✅ Updated {updated} entries')
 
-    # Compute and show mean/std for completed method/dataset
-    from collections import defaultdict
-    by_key = defaultdict(list)
-    for r in results:
-        if r.get("status") == "OK":
-            m = r["method"]
-            if m in pt_methods:
-                key = (m, r.get("dataset"), r.get("seq_len"))
-                d = r.get("discriminative_score")
-                p = r.get("predictive_score")
-                if d is not None and not (isinstance(d, float) and np.isnan(d)):
-                    by_key[key].append((d, p))
-
-    print("\nA13/A14 Summary:")
-    for key in sorted(by_key):
-        vals = by_key[key]
-        if len(vals) >= 3:
-            disc_vals = [v[0] for v in vals]
-            pred_vals = [v[1] for v in vals]
-            print(f"  {key[0]:15s} {key[1]:12s} s{key[2]}: "
-                  f"A13={np.mean(disc_vals):.4f}±{np.std(disc_vals):.4f} "
-                  f"A14={np.mean(pred_vals):.4f}±{np.std(pred_vals):.4f} "
-                  f"({len(vals)} seeds)")
-
-    # Save
-    with open(RESULTS, "w") as f:
-        for r in results:
-            f.write(json.dumps(r) + "\n")
-    print(f"\nSaved updated results to {RESULTS}")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
