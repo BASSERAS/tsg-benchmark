@@ -1,0 +1,25 @@
+[
+  {
+    "method": "csdi",
+    "dataset": "energy",
+    "seq_len": 24,
+    "seed": 0,
+    "status": "OK",
+    "params": 609985,
+    "time": 966.1,
+    "path_mmd2": 0.0036178475539433846,
+    "terminal_mmd2": 0.004997616711471392,
+    "increment_mmd2": 0.0016105256779160304,
+    "volatility_mmd": 0.0266466584318537,
+    "terminal_swd": 1.7806831339824916,
+    "path_swd": 2.3634520220429147,
+    "cov_error": 853.4569264229232,
+    "mean_rmse": 9.915669848698457,
+    "std_error": 0.6460163515119248,
+    "kurtosis_error": 19.594768865055528,
+    "acf_err_abs": 0.024624162309178844,
+    "acf_err_sq": 0.019410379122643536,
+    "discriminative_score": null,
+    "predictive_score": null
+  }
+]
